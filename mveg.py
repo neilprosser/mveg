@@ -1,24 +1,39 @@
 import commands
+import httplib
 import json
 import sys
-import time
+
+if len(sys.argv) != 6:
+    sys.stderr.write('Not enough (or too many) arguments\n')
+    sys.exit(1)
+
+hostname = sys.argv[1].partition('.')[0].lower()
+environment = sys.argv[2].lower()
+application = sys.argv[3].lower()
+prefix = '{0}.{1}.{2}'.format(environment, application, hostname)
+
+host = sys.argv[4]
+port = sys.argv[5]
+
+connection = httplib.HTTPConnection(host, port)
+
+def tidy_up():
+    connection.close()
+
+def request_and_response_or_bail(method, url, message):
+    try:
+        connection.request(method, url)
+        return connection.getresponse().read()
+    except:
+        tidy_up()
+        sys.stderr.write('{0}\n'.format(message))
+        sys.exit(1)
 
 def create_fs_lines(prefix, fs, timestamp):
+    create_dictionary_lines("%s.%s" % (prefix, 'total'), fs['total'], timestamp)
     for value in fs['data']:
         path = value['path'].lstrip('/').replace('/', '_')
-        print "%s.%s.%s %d %d" % (prefix, path, 'total_in_bytes', value['total_in_bytes'], timestamp)
-        print "%s.%s.%s %d %d" % (prefix, path, 'free_in_bytes', value['free_in_bytes'], timestamp)
-        print "%s.%s.%s %d %d" % (prefix, path, 'available_in_bytes', value['available_in_bytes'], timestamp)
-
-def create_os_lines(prefix, os, timestamp):
-    create_dictionary_lines("%s.%s" % (prefix, 'cpu'), os['cpu'], timestamp)
-    create_dictionary_lines("%s.%s" % (prefix, 'mem'), os['mem'], timestamp)
-    create_dictionary_lines("%s.%s" % (prefix, 'swap'), os['swap'], timestamp)
-    print "%s.%s %d %d" % (prefix, 'uptime_in_millis', os['uptime_in_millis'], timestamp)
-    load_average = os['load_average']
-    print "%s.%s.%s %g %d" % (prefix, 'load_average', '1m', load_average[0], timestamp)
-    print "%s.%s.%s %g %d" % (prefix, 'load_average', '5m', load_average[1], timestamp)
-    print "%s.%s.%s %g %d" % (prefix, 'load_average', '15m', load_average[2], timestamp)
+        create_dictionary_lines("%s.%s" % (prefix, path), value, timestamp)
 
 def sanitize(name):
     return name.replace(' ', '-')
@@ -34,28 +49,22 @@ def create_dictionary_lines(prefix, dictionary, timestamp):
         elif isinstance(value, dict):
             create_dictionary_lines("%s.%s" % (prefix, sanitize(name)), value, timestamp)
 
+data = request_and_response_or_bail('GET', '/_nodes/_local/stats/?all=true', 'Error while retrieving stats.')
+stats = json.loads(data)
+nodes = stats['nodes']
+nodeId = nodes.keys()[0]
+node = nodes[nodeId]
+timestamp = node['timestamp'] / 1000
 
-environment = sys.argv[1]
-hostname = commands.getoutput('hostname').partition('.')[0].lower()
-prefix = "%s.elasticsearch.%s" % (environment, hostname)
+create_dictionary_lines("%s.%s" % (prefix, 'indices'), node['indices'], timestamp)
+create_dictionary_lines("%s.%s" % (prefix, 'os'), node['os'], timestamp)
+create_dictionary_lines("%s.%s" % (prefix, 'process'), node['process'], timestamp)
+create_dictionary_lines("%s.%s" % (prefix, 'jvm'), node['jvm'], timestamp)
+create_dictionary_lines("%s.%s" % (prefix, 'thread_pool'), node['thread_pool'], timestamp)
+create_fs_lines("%s.%s" % (prefix, 'fs'), node['fs'], timestamp)
+create_dictionary_lines("%s.%s" % (prefix, 'transport'), node['transport'], timestamp)
+create_dictionary_lines("%s.%s" % (prefix, 'http'), node['http'], timestamp)
+create_dictionary_lines("%s.%s" % (prefix, 'breakers'), node['breakers'], timestamp)
+create_dictionary_lines("%s.%s" % (prefix, 'script'), node['script'], timestamp)
 
-lines = []
-
-data = sys.stdin.readlines()
-for jsonline in data:
-    nodes = json.loads(jsonline)['nodes']
-    nodeId = nodes.keys()[0]
-    node = nodes[nodeId]
-    timestamp = node['timestamp'] / 1000
-
-    create_dictionary_lines("%s.%s" % (prefix, 'indices'), node['indices'], timestamp)
-    create_dictionary_lines("%s.%s" % (prefix, 'process'), node['process'], timestamp)
-    create_dictionary_lines("%s.%s" % (prefix, 'jvm'), node['jvm'], timestamp)
-    create_dictionary_lines("%s.%s" % (prefix, 'thread_pool'), node['thread_pool'], timestamp)
-    create_dictionary_lines("%s.%s" % (prefix, 'transport'), node['transport'], timestamp)
-    create_dictionary_lines("%s.%s" % (prefix, 'http'), node['http'], timestamp)
-    create_dictionary_lines("%s.%s" % (prefix, 'network'), node['network'], timestamp)
-    create_fs_lines("%s.%s" % (prefix, 'fs'), node['fs'], timestamp)
-    create_os_lines("%s.%s" % (prefix, 'os'), node['os'], timestamp)
-
-    print '\n'.join(lines)
+tidy_up()

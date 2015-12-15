@@ -1,22 +1,52 @@
 #!/bin/bash
-#
-# Use me like this:
-# /path/to/me.sh | nc -w 20 {graphite_host} {graphite_port}
-#
 
-function get() {
-  code=1
-  while [ $code -ne 0 ]
-  do
-    response=`curl --silent "$1" -m 1`
-    code=$?
-  done
-}
+[ -e /etc/sysconfig/mveg ] && . /etc/sysconfig/mveg
 
-script=`readlink -f $0`
-path=`dirname $script`
-port="8080"
-environment="Live"
+if [ "xx$ENVIRONMENT" = "xx" ]
+then
+  echo "ENVIRONMENT must be set"
+  exit 1
+fi
 
-get "http://localhost:$port/_nodes/_local/stats?all=true"
-echo $response | python $path/mveg.py $environment
+if [ "xx$APP_NAME" = "xx" ]
+then
+  APP_NAME="elasticsearch"
+fi
+
+if [ "xx$ES_HOST" = "xx" ]
+then
+  echo "ES_HOST must be set"
+  exit 1
+fi
+
+if [ "xx$ES_PORT" = "xx" ]
+then
+  echo "ES_PORT must be set"
+  exit 1
+fi
+
+if [ "xx$CARBON_HOST" = "xx" ]
+then
+  echo "CARBON_HOST must be set"
+  exit 1
+fi
+
+if [ "xx$CARBON_PORT" = "xx" ]
+then
+  echo "CARBON_PORT must be set"
+  exit 1
+fi
+
+if [ "xx$HOSTNAME" = "xx" ]
+then
+  HOSTNAME=`hostname`
+fi
+
+SCRIPT_PATH="$(cd `dirname $0` && pwd)"
+
+OUTPUT=`python $SCRIPT_PATH/mveg.py $HOSTNAME $ENVIRONMENT $APP_NAME $ES_HOST $ES_PORT`
+
+if [ $? = 0 ]
+then
+  echo "${OUTPUT}" | nc -w 20 $CARBON_HOST $CARBON_PORT
+fi
