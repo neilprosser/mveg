@@ -15,14 +15,12 @@ fi
 
 if [ "xx$ES_HOST" = "xx" ]
 then
-  echo "ES_HOST must be set"
-  exit 1
+  ES_HOST="localhost"
 fi
 
 if [ "xx$ES_PORT" = "xx" ]
 then
-  echo "ES_PORT must be set"
-  exit 1
+  ES_PORT="9200"
 fi
 
 if [ "xx$CARBON_HOST" = "xx" ]
