@@ -1,1 +1,1 @@
-*/1 * * * * root sh /usr/local/mveg/mveg.sh > /dev/null 2>&1
+*/1 * * * * root . /etc/bashrc; sh /usr/local/mveg/mveg.sh > /dev/null 2>&1
